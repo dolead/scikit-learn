@@ -866,3 +866,48 @@ def merge_inertia_nodes(node1, node2):
                   n2 * sqeuclidean(node2.centroid, new_centroid)
     return NodeInertia(new_centroid, new_inertia, n1 + n2)
 
+def k_max_inertia_reduction(hierarchical_clustering, X):
+    """
+    Given a hierarchical clustering and the starting points,
+    Find the cut that maximize relative loss of inertia.
+
+    Parameter
+    ---------
+    hierarchical_clustering: list of children of all non-leaf nodes,
+         as in ward_tree
+    X: starting points, an nb_points x nb_feature array
+
+    Return
+    ------
+    clusters: list of points in each clusters
+    """
+    inertia_loss = 0
+    curr_inertia = 0
+    old_inertia = 0
+    k = X.shape[0]
+    clusters = {i : [i] for i in range(k)}
+    curr_clusters = dict(clusters)
+    nodes = []
+    node_nb = k
+    for children in hierarchical_clustering:
+        this_node = NodeInertia(0, 0, 0)
+        assigned_points = []
+        for c in children:
+            if c < k:
+                new_node = NodeInertia(X[c, :], 0, 1)
+            else:
+                new_node = nodes[c - k]
+                curr_inertia -= new_node.inertia
+            assigned_points += curr_clusters.pop(c)
+            this_node = merge_inertia_nodes(this_node, new_node)
+        curr_inertia += this_node.inertia
+        curr_clusters[node_nb] = assigned_points
+        nodes.append(this_node)
+        node_nb += 1
+        if (not curr_inertia or
+            old_inertia / curr_inertia > inertia_loss):
+            clusters = dict(curr_clusters)
+            inertia_loss = old_inertia / (curr_inertia or 1)
+        old_inertia = curr_inertia
+
+    return clusters.values()
