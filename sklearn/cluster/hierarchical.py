@@ -8,11 +8,13 @@ Authors : Vincent Michel, Bertrand Thirion, Alexandre Gramfort,
 License: BSD 3 clause
 """
 from heapq import heapify, heappop, heappush, heappushpop
+from collections import namedtuple
 import warnings
 import sys
 
 import numpy as np
 from scipy import sparse
+from scipy.spatial.distance import sqeuclidean
 
 from ..base import BaseEstimator, ClusterMixin
 from ..externals.joblib import Memory
@@ -122,7 +124,7 @@ def ward_tree(X, connectivity=None, n_components=None, n_clusters=None):
 
     Returns
     -------
-    children : 2D array, shape (n_nodes, 2)
+   children : 2D array, shape (n_nodes, 2)
         The children of each non-leaf node. Values less than `n_samples` refer
         to leaves of the tree. A greater value `i` indicates a node with
         children `children[i - n_samples]`.
@@ -827,3 +829,40 @@ class WardAgglomeration(AgglomerationTransform, Ward):
         """
         X = check_array(X)
         return Ward.fit(self, X.T, **params)
+
+
+###############################################################################
+# Finding the number of clusters that maximize inertia reduction
+
+"""
+From a hierarchical clustering, starting with each point on its own,
+we compute, at each step, the inertia of the partition.
+We choose the level i with the highest relative loss of inertia
+inertia(cluster(n+1)) / inertia(cluster(n))
+"""
+
+# structure all data needed to compute inertia of future nodes
+NodeInertia = namedtuple('NodeInertia', ['centroid', 'inertia', 'nb_points'])
+
+def merge_inertia_nodes(node1, node2):
+    """
+    For two clusters with a centroid, an inertia and their number of points,
+    we compute the centroid, inertia and number of points of the merge of
+    these clusters.
+
+    Parameter
+    --------
+    node1, node2: NodeInertia
+
+    Return
+    ------
+    NodeInertia
+    """
+    n1 = node1. nb_points
+    n2 = node2.nb_points
+    new_centroid = (n1 * node1.centroid + n2* node2.centroid) / (n1 + n2)
+    new_inertia = node1.inertia + node2.inertia +\
+                  n1 * sqeuclidean(node1.centroid, new_centroid) +\
+                  n2 * sqeuclidean(node2.centroid, new_centroid)
+    return NodeInertia(new_centroid, new_inertia, n1 + n2)
+
