@@ -15,7 +15,7 @@ See http://scikit-learn.org for complete documentation.
 import sys
 import re
 import warnings
-__version__ = '0.17-git'
+__version__ = '0.17.1-git'
 
 # Make sure that DeprecationWarning within this package always gets printed
 warnings.filterwarnings('always', category=DeprecationWarning,
