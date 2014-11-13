@@ -911,3 +911,34 @@ def k_max_inertia_reduction(hierarchical_clustering, X):
         old_inertia = curr_inertia
 
     return clusters.values()
+
+def k_ward_clusters(X, nb_clusters):
+    """
+    Form k clusters from ward hierarchical clustering
+    Parameter
+    ---------
+    X: starting points, an nb_points x nb_feature array
+    nb_clusters: number of wanted clusters
+
+    Return
+    ------
+    clusters: list of points in each clusters
+    """
+    # Normalizing features
+    X = X - np.mean(X, axis=0)
+    X = X / np.std(X, axis=0)
+
+    tree, _, _, _ = ward_tree(X)
+
+    n = X.shape[0]
+    clusters = {i : [i] for i in range(n)}
+    node_nb = n
+    for i, children in enumerate(tree):
+        if i < n -nb_clusters:
+            assigned_points = []
+            for c in children:
+                assigned_points += curr_clusters.pop(c)
+            curr_clusters[node_nb] = assigned_points
+            node_nb += 1
+
+    return clusters.values()
