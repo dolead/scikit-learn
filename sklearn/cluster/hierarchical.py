@@ -925,8 +925,8 @@ def k_ward_clusters(X, nb_clusters):
     clusters: list of points in each clusters
     """
     # Normalizing features
-    X = X - np.mean(X, axis=0)
-    X = X / np.std(X, axis=0)
+    X -= np.mean(X, axis=0)
+    X /= np.std(X, axis=0)
 
     tree, _, _, _ = ward_tree(X)
 
@@ -937,8 +937,8 @@ def k_ward_clusters(X, nb_clusters):
         if i < n -nb_clusters:
             assigned_points = []
             for c in children:
-                assigned_points += curr_clusters.pop(c)
-            curr_clusters[node_nb] = assigned_points
+                assigned_points += clusters.pop(c)
+            clusters[node_nb] = assigned_points
             node_nb += 1
 
     return clusters.values()
