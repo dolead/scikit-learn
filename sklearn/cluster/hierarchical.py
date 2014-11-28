@@ -13,6 +13,7 @@ import warnings
 import sys
 
 import numpy as np
+from math import sqrt
 from scipy import sparse
 from scipy.spatial.distance import sqeuclidean
 
@@ -26,6 +27,10 @@ from ..utils.sparsetools import connected_components
 from . import _hierarchical
 from ._feature_agglomeration import AgglomerationTransform
 from ..utils.fast_dict import IntFloatDict
+
+import logging
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
 
 if sys.version_info[0] > 2:
     xrange = range
@@ -844,6 +849,7 @@ inertia(cluster(n+1)) / inertia(cluster(n))
 # structure all data needed to compute inertia of future nodes
 NodeInertia = namedtuple('NodeInertia', ['centroid', 'inertia', 'nb_points'])
 
+
 def merge_inertia_nodes(node1, node2):
     """
     For two clusters with a centroid, an inertia and their number of points,
@@ -860,11 +866,12 @@ def merge_inertia_nodes(node1, node2):
     """
     n1 = node1. nb_points
     n2 = node2.nb_points
-    new_centroid = (n1 * node1.centroid + n2* node2.centroid) / (n1 + n2)
+    new_centroid = (n1 * node1.centroid + n2 * node2.centroid) / (n1 + n2)
     new_inertia = node1.inertia + node2.inertia +\
                   n1 * sqeuclidean(node1.centroid, new_centroid) +\
                   n2 * sqeuclidean(node2.centroid, new_centroid)
     return NodeInertia(new_centroid, new_inertia, n1 + n2)
+
 
 def k_max_inertia_reduction(hierarchical_clustering, X):
     """
@@ -885,7 +892,7 @@ def k_max_inertia_reduction(hierarchical_clustering, X):
     curr_inertia = 0
     old_inertia = 0
     k = X.shape[0]
-    clusters = {i : [i] for i in range(k)}
+    clusters = {i: [i] for i in range(k)}
     curr_clusters = dict(clusters)
     nodes = []
     node_nb = k
@@ -901,16 +908,19 @@ def k_max_inertia_reduction(hierarchical_clustering, X):
             assigned_points += curr_clusters.pop(c)
             this_node = merge_inertia_nodes(this_node, new_node)
         curr_inertia += this_node.inertia
+        mean_inertia = curr_inertia * sqrt(2 * k - node_nb - 1)
         curr_clusters[node_nb] = assigned_points
         nodes.append(this_node)
         node_nb += 1
-        if (not curr_inertia or
-            old_inertia / curr_inertia > inertia_loss):
+        inertia_diff = mean_inertia - old_inertia
+        if (node_nb > k + k / 2 and mean_inertia and
+            inertia_diff / mean_inertia > inertia_loss):
             clusters = dict(curr_clusters)
-            inertia_loss = old_inertia / (curr_inertia or 1)
-        old_inertia = curr_inertia
+            inertia_loss = inertia_diff / mean_inertia
+        old_inertia = mean_inertia
 
     return clusters.values()
+
 
 def k_ward_clusters(X, nb_clusters):
     """
@@ -931,10 +941,10 @@ def k_ward_clusters(X, nb_clusters):
     tree, _, _, _ = ward_tree(X)
 
     n = X.shape[0]
-    clusters = {i : [i] for i in range(n)}
+    clusters = {i: [i] for i in range(n)}
     node_nb = n
     for i, children in enumerate(tree):
-        if i < n -nb_clusters:
+        if i < n - nb_clusters:
             assigned_points = []
             for c in children:
                 assigned_points += clusters.pop(c)
