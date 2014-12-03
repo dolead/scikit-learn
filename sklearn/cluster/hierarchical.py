@@ -38,6 +38,7 @@ if sys.version_info[0] > 2:
 ###############################################################################
 # For non fully-connected graphs
 
+
 def _fix_connectivity(X, connectivity, n_components=None,
                       affinity="euclidean"):
     """
@@ -625,13 +626,13 @@ class AgglomerativeClustering(BaseEstimator, ClusterMixin):
                              "work with euclidean distances." %
                              (self.affinity, ))
 
-        if not self.linkage in _TREE_BUILDERS:
+        if self.linkage not in _TREE_BUILDERS:
             raise ValueError("Unknown linkage type %s."
                              "Valid options are %s" % (self.linkage,
                                                        _TREE_BUILDERS.keys()))
         tree_builder = _TREE_BUILDERS[self.linkage]
 
-        if not self.connectivity is None:
+        if self.connectivity is not None:
             if (self.connectivity.shape[0] != X.shape[0] or
                     self.connectivity.shape[1] != X.shape[0]):
                 raise ValueError("`connectivity` does not have shape "
@@ -892,34 +893,36 @@ def k_max_inertia_reduction(hierarchical_clustering, X):
     curr_inertia = 0
     old_inertia = 0
     k = X.shape[0]
-    clusters = {i: [i] for i in range(k)}
-    curr_clusters = dict(clusters)
     nodes = []
     node_nb = k
-    for children in hierarchical_clustering:
+    nb_cluster = 0
+    for i, children in enumerate(hierarchical_clustering):
+        # compute node made by merging two previous nodes or points
         this_node = NodeInertia(0, 0, 0)
-        assigned_points = []
         for c in children:
             if c < k:
                 new_node = NodeInertia(X[c, :], 0, 1)
             else:
                 new_node = nodes[c - k]
                 curr_inertia -= new_node.inertia
-            assigned_points += curr_clusters.pop(c)
             this_node = merge_inertia_nodes(this_node, new_node)
         curr_inertia += this_node.inertia
-        mean_inertia = curr_inertia * sqrt(2 * k - node_nb - 1)
-        curr_clusters[node_nb] = assigned_points
         nodes.append(this_node)
         node_nb += 1
+
+        # computing inertia
+        mean_inertia = curr_inertia * sqrt(2 * k - node_nb - 1)
+        # if merging these nodes proportionnaly adds more inertia then ever,
+        # then optimal number of clusters is reached before merging these
+        # two nodes
         inertia_diff = mean_inertia - old_inertia
         if (node_nb > k + k / 2 and mean_inertia and
             inertia_diff / mean_inertia > inertia_loss):
-            clusters = dict(curr_clusters)
             inertia_loss = inertia_diff / mean_inertia
+            nb_cluster = k - i
         old_inertia = mean_inertia
 
-    return clusters.values()
+    return k_ward_clusters(X, nb_cluster)
 
 
 def k_ward_clusters(X, nb_clusters):
