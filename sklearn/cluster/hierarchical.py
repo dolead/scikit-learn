@@ -867,7 +867,7 @@ def merge_inertia_nodes(node1, node2):
     """
     n1 = node1. nb_points
     n2 = node2.nb_points
-    new_centroid = (n1 * node1.centroid + n2 * node2.centroid) / (n1 + n2)
+    new_centroid = (n1 * node1.centroid + n2 * node2.centroid) / float(n1 + n2)
     new_inertia = node1.inertia + node2.inertia +\
                   n1 * sqeuclidean(node1.centroid, new_centroid) +\
                   n2 * sqeuclidean(node2.centroid, new_centroid)
@@ -938,8 +938,9 @@ def k_ward_clusters(X, nb_clusters):
     clusters: list of points in each clusters
     """
     # Normalizing features
-    X -= np.mean(X, axis=0)
-    X /= np.std(X, axis=0)
+    X = X - np.mean(X, axis=0)
+    stdev = [(s or 1) for s in np.std(X, axis=0)]
+    X = X / stdev
 
     tree, _, _, _ = ward_tree(X)
 
