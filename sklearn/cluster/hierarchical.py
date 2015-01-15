@@ -922,7 +922,7 @@ def k_max_inertia_reduction(hierarchical_clustering, X):
             nb_cluster = k - i
         old_inertia = mean_inertia
 
-    return k_ward_clusters(X, nb_cluster)
+    return tree_to_k_clusters(nb_cluster, hierarchical_clustering)
 
 
 def k_ward_clusters(X, nb_clusters):
@@ -943,11 +943,31 @@ def k_ward_clusters(X, nb_clusters):
 
     tree, _, _, _ = ward_tree(X)
 
-    n = X.shape[0]
-    clusters = {i: [i] for i in range(n)}
-    node_nb = n
-    for i, children in enumerate(tree):
-        if i < n - nb_clusters:
+    return tree_to_k_clusters(nb_clusters, tree)
+
+
+def tree_to_k_clusters(nb_clusters, hierarchical_clustering):
+    """
+    Given a number of clusters and a hierarchical clustering,
+    returns the k clusters
+
+    Parameter
+    ---------
+    nb_clusters: int: wanted number of clusters
+    hierarchical_clustering: list of children of all non-leaf nodes,
+         as in ward_tree
+
+    Return
+    ------
+    clusters: list of list of int
+    """
+    nb_points = len(hierarchical_clustering) + 1
+    # it takes n - 1 "couples" to group "n" points
+    # into 1 group with all points
+    clusters = {i: [i] for i in range(nb_points)}
+    node_nb = nb_points
+    for i, children in enumerate(hierarchical_clustering):
+        if i < nb_points - nb_clusters:
             assigned_points = []
             for c in children:
                 assigned_points += clusters.pop(c)
