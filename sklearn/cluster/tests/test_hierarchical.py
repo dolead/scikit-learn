@@ -20,9 +20,10 @@ from sklearn.utils.testing import clean_warning_registry, ignore_warnings
 
 from sklearn.cluster import Ward, WardAgglomeration, ward_tree
 from sklearn.cluster import AgglomerativeClustering, FeatureAgglomeration
-from sklearn.cluster.hierarchical import (_hc_cut, _TREE_BUILDERS,
-                                          linkage_tree, NodeInertia,
-                                          k_max_inertia_reduction)
+from sklearn.cluster.hierarchical import (
+    _hc_cut, _TREE_BUILDERS, linkage_tree, NodeInertia,
+    k_max_inertia_reduction, merge_inertia_nodes, tree_to_k_clusters,
+)
 from sklearn.feature_extraction.image import grid_to_graph
 from sklearn.metrics.pairwise import PAIRED_DISTANCES, cosine_distances,\
     manhattan_distances
@@ -313,19 +314,24 @@ def test_int_float_dict():
 
 def test_NodeHierarchicalInertia():
     X = np.random.rand(5, 3)
-    nodes = [NodeInertia(x, 0, 1, i) for i, x in enumerate(X)]
+    nodes = [NodeInertia(x, 0, 1) for i, x in enumerate(X)]
     first_node = merge_inertia_nodes(nodes[0], nodes[1])
     second_node = reduce(lambda x, y: merge_inertia_nodes(x, y),
                          nodes[2:])
-    assert_equal(first_node.centroid, np.mean(X[:2], axis=0))
-    assert_equal(first_node.inertia, sum(np.var(X[:2], axis=0)))
+    points = X[:2]
+    center = np.mean(points, axis=0)
+    assert_true(all(calc == theo for calc, theo
+                    in zip(first_node.centroid, center)))
+    inertia = sum(sum((points - center) ** 2))
+    assert_equal(first_node.inertia, inertia)
     assert_equal(first_node.nb_points, 2)
-    assert_equal(first_node.points, [0, 1])
     final_node = merge_inertia_nodes(first_node, second_node)
-    assert_equal(final_node.centroid, np.mean(X, axis=0))
-    assert_equal(final_node.inertia, sum(np.var(X, axis=0)))
+    center = np.mean(X, axis=0)
+    assert_true(all(calc == theo for calc, theo
+                    in zip(final_node.centroid, center)))
+    inertia = sum(sum((X - center) ** 2))
+    assert_equal(final_node.inertia, inertia)
     assert_equal(final_node.nb_points, 5)
-    assert_equal(final_node.points, range(5))
 
 def test_k_max_inertia_reduction():
     X = np.array([[0, 0, 1],
@@ -336,7 +342,18 @@ def test_k_max_inertia_reduction():
                   [0, 1, 1]])
     clustering_tree = np.array([[0, 2], [3, 4], [5, 6], [1, 7], [8, 9]])
     clusters = k_max_inertia_reduction(clustering_tree, X)
-    assert_equal(clusters, [[5, 0, 2], [1], [3, 4]])
+    assert_equal(clusters, [[1], [3, 4], [5, 0, 2]])
+
+def test_tree_to_k_clusters():
+    X = np.array([[0, 0, 1],
+                  [1, 1, 2],
+                  [0, 0, 1],
+                  [0, 2, 2],
+                  [1, 2, 2],
+                  [0, 1, 1]])
+    clustering_tree = np.array([[0, 2], [3, 4], [5, 6], [1, 7], [8, 9]])
+    clusters = tree_to_k_clusters(2, clustering_tree)
+    assert_equal(clusters, [[5, 0, 2], [1, 3, 4]])
 
 if __name__ == '__main__':
     import nose
