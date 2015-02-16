@@ -2,8 +2,9 @@ import numpy as np
 
 from sklearn.utils.testing import assert_array_equal, assert_almost_equal, assert_equal
 
-from sklearn.cluster.choose_nb_cluster import (adjacency_matrix, _one_stability_measure,
-                                               stability)
+from sklearn.cluster.choose_nb_cluster import (
+    adjacency_matrix, _one_stability_measure, stability, distortion
+)
 from sklearn.cluster.k_means_ import k_means
 
 
@@ -38,3 +39,10 @@ def test_stability():
     X += offset
     clu_meth = lambda X, k: k_means(X, k, random_state=1)[1]
     assert_equal(stability(X, clu_meth, k_max=6, nb_draw=10, random_state=0), 3)
+
+
+def test_distortion():
+    X = np.array([[0, 0], [2, 2],
+                  [5, 5], [6, 6]])
+    labels = [0, 0, 1, 1]
+    assert_equal(distortion(X, labels), 2.5)
