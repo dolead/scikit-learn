@@ -139,3 +139,27 @@ def distortion(X, labels):
         inertia += np.sum((x - centers[lab]) ** 2)
 
     return inertia / X.shape[1]
+
+
+def normal_distortion(data_shape, clu_meth, nb_draw=100, random_state=None):
+    """
+    Draw centered and reduced data of size data_shape = (nb_data, nb_feature),
+    Clusterize data using clu_meth and compute distortion
+
+    Parameter
+    ---------
+    data_shape: dimension of input data, (nb_data, nb_feature)
+    clu_meth: function data -> labels: list of size nb_data of int
+
+    Return
+    ------
+    mean_distortion: float
+    """
+    rng = check_random_state(random_state)
+
+    dist = .0
+    for i in range(nb_draw):
+        X = rng.standard_normal(data_shape)
+        dist += distortion(X, clu_meth(X))
+
+    return dist / nb_draw
