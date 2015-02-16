@@ -1,6 +1,8 @@
 from __future__ import division
 from collections import defaultdict
 
+from math import log
+
 import numpy as np
 import scipy.sparse as sp
 from scipy.spatial.distance import cosine
@@ -163,3 +165,44 @@ def normal_distortion(data_shape, clu_meth, nb_draw=100, random_state=None):
         dist += distortion(X, clu_meth(X))
 
     return dist / nb_draw
+
+
+def gap_statistic(X, clu_meth, k_max=None, nb_draw=100, random_state=None):
+    """
+    Estimating optimal number of cluster for data X with method clu_meth by
+    comparing distortion of clustered real data with distortion of clustered
+    random data. Statistic gap is defined as
+
+    Gap(k) = E(log(D_rand)) - log(D_real)
+
+    From R.Tibshirani, G. Walther and T.Hastie, Estimating the number of
+    clusters in a dataset via the Gap statistic, Journal of the Royal
+    Statistical Socciety: Seris (B) (Statistical Methodology), 63(2), 411-423
+
+    Parameter
+    ---------
+    X: data. array nb_data * nb_feature
+    clu_meth: function X, nb_cluster -> assignement of each point to a
+        cluster (list of int of length n_data)
+
+    Return
+    ------
+    k: int: number of cluster that maximizes the gap statistic
+    """
+    rng = check_random_state(random_state)
+
+    # if no maximum number of clusters set, take datasize divided by 2
+    if not k_max:
+        k_max = X.shape[0] // 2
+
+    k_star = 1
+    gap = .0
+    shape = X.shape
+    for k in range(2, k_max + 1):
+        real_dist = distortion(X, clu_meth(X, k))
+        meth = lambda X: clu_meth(X, k)
+        exp_dist = normal_distortion(shape, meth, nb_draw)
+        if log(exp_dist) - log(real_dist) > gap:
+            k_star = k
+            gap = log(exp_dist) - log(real_dist)
+    return k_star
