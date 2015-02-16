@@ -1,3 +1,6 @@
+from __future__ import division
+from collections import defaultdict
+
 import numpy as np
 from scipy.spatial.distance import cosine
 
@@ -117,3 +120,25 @@ def _one_stability_measure(cluster_method, X, prop_sample, random_state=None):
     adj_mat_2 = adjacency_matrix(assi_2)[np.ix_(common_points_2,
                                                 common_points_2)]
     return 1 - cosine(adj_mat_1.flatten(), adj_mat_2.flatten())
+
+
+def distortion(X, labels):
+    """
+    Given data and their cluster assigment, compute the distortion D
+
+    D = \sum_{x \in X}||x - c_x||^2
+
+    With c_x the center of the cluster containing x
+    """
+    assi = defaultdict(list)
+    for i, l in enumerate(labels):
+        assi[l].append(i)
+
+    centers = {lab: np.mean(X[point, :], axis=0)
+               for lab, point in assi.items()}
+
+    inertia = .0
+    for x, lab in zip(X, labels):
+        inertia += np.sum((x - centers[lab]) ** 2)
+
+    return inertia / X.shape[1]
