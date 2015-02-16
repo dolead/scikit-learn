@@ -1,10 +1,13 @@
 from __future__ import division
 from collections import defaultdict
 
+from math import pow, sqrt, log
+
 import numpy as np
 from scipy.spatial.distance import cosine
 
 from ..utils import check_random_state
+from sklearn import preprocessing
 
 
 def stability(X, cluster_method, k_max=None, nb_draw=100, prop_subset=.8,
@@ -142,3 +145,138 @@ def distortion(X, labels):
         inertia += np.sum((x - centers[lab]) ** 2)
 
     return inertia / X.shape[1]
+
+
+def normal_distortion(X, clu_meth, nb_draw=100, random_state=None):
+    """
+    Draw centered and reduced data of size data_shape = (nb_data, nb_feature),
+    Clusterize data using clu_meth and compute distortion
+
+    Parameter
+    ---------
+    X numpy array of size (nb_data, nb_feature)
+    clu_meth: function data -> labels: list of size nb_data of int
+
+    Return
+    ------
+    mean_distortion: float
+    """
+    rng = check_random_state(random_state)
+
+    data_shape = X.shape
+    dist = []
+    for i in range(nb_draw):
+        X_rand = rng.standard_normal(data_shape)
+        dist.append(distortion(X_rand, clu_meth(X_rand)) / data_shape[0])
+
+    return dist
+
+
+def uniform_distortion(X, clu_meth, nb_draw=100, val_min=None, val_max=None,
+                       random_state=None):
+    """
+    Uniformly draw data of size data_shape = (nb_data, nb_feature)
+    in the smallest hyperrectangle containing real data X.
+    Clusterize data using clu_meth and compute distortion
+
+    Parameter
+    ---------
+    X: numpy array of shape (nb_data, nb_feature)
+    clu_meth: function data -> labels: list of size nb_data of int
+    val_min: minimum values of each dimension of input data
+        array of length nb_feature
+    val_max: maximum values of each dimension of input data
+        array of length nb_feature
+
+    Return
+    ------
+    mean_distortion: float
+    """
+    rng = check_random_state(random_state)
+    if val_min is None:
+        val_min = np.min(X, axis=0)
+    if val_max is None:
+        val_max = np.max(X, axis=0)
+
+    dist = []
+    for i in range(nb_draw):
+        X_rand = rng.uniform(size=X.shape) * (val_max - val_min) + val_min
+        dist.append(distortion(X_rand, clu_meth(X_rand)) / X.shape[0])
+
+    return dist
+
+
+def gap_statistic(X, clu_meth, k_max=None, nb_draw=10, random_state=None,
+                  draw_model='uniform'):
+    """
+    Estimating optimal number of cluster for data X with method clu_meth by
+    comparing distortion of clustered real data with distortion of clustered
+    random data. Let D_rand(k) be the distortion of random data in k clusters,
+    D_real(k) distortion of real data in k clusters, statistic gap is defined
+    as
+
+    Gap(k) = E(log(D_rand(k))) - log(D_real(k))
+
+    We draw nb_draw random data "shapened-like X" (shape depend on draw_model)
+    We select the smallest k such as the gap between distortion of k clusters
+    of random data and k clusters of real data is superior to the gap with
+    k + 1 clusters minus a "standard-error" safety. Precisely:
+
+    k_star = min_k k
+         s.t. Gap(k) >= Gap(k + 1) - s(k + 1)
+              s(k) = stdev(log(D_rand)) * sqrt(1 + 1 / nb_draw)
+
+    From R.Tibshirani, G. Walther and T.Hastie, Estimating the number of
+    clusters in a dataset via the Gap statistic, Journal of the Royal
+    Statistical Socciety: Seris (B) (Statistical Methodology), 63(2), 411-423
+
+    Parameter
+    ---------
+    X: data. array nb_data * nb_feature
+    clu_meth: function X, nb_cluster -> assignement of each point to a
+        cluster (list of int of length n_data)
+    nb_draw: int: number of random data of shape (nb_data, nb_feature) drawn
+        to estimate E(log(D_rand(k)))
+    draw_model: under which i.i.d data are draw. default: uniform data
+        (following Tibshirani et al.)
+        can be 'uniform', 'normal' (Gaussian distribution)
+
+    Return
+    ------
+    k: int: number of cluster that maximizes the gap statistic
+    """
+    rng = check_random_state(random_state)
+
+    # if no maximum number of clusters set, take datasize divided by 2
+    if not k_max:
+        k_max = X.shape[0] // 2
+    if draw_model == 'uniform':
+        val_min = np.min(X, axis=0)
+        val_max = np.max(X, axis=0)
+    elif draw_model == 'normal':
+        X = preprocessing.scale(X)
+
+    k_star = 1
+    old_gap = 0
+    gap = .0
+    for k in range(1, k_max + 2):
+        real_dist = distortion(X, clu_meth(X, k))
+        meth = lambda X: clu_meth(X, k)
+        # expected distortion
+        if draw_model == 'uniform':
+            rand_dist = uniform_distortion(X, meth, nb_draw, val_min=val_min,
+                                           val_max=val_max)
+        elif draw_model == 'normal':
+            rand_dist = normal_distortion(X, meth, nb_draw)
+        else:
+            raise ValueError(
+                "For gap statistic, model for random data is unknown")
+        rand_dist = np.log(rand_dist)
+        exp_dist = np.mean(rand_dist)
+        std_dist = np.std(rand_dist)
+        gap = exp_dist - log(real_dist)
+        safety = std_dist * sqrt(1 + 1 / nb_draw)
+        if k_star < 2 and old_gap >= gap - safety:
+            k_star = k - 1
+        old_gap = gap
+    return k_star
