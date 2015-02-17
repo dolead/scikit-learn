@@ -1,7 +1,7 @@
 from __future__ import division
 from collections import defaultdict
 
-from math import log
+from math import log, pow
 
 import numpy as np
 import scipy.sparse as sp
@@ -206,3 +206,45 @@ def gap_statistic(X, clu_meth, k_max=None, nb_draw=100, random_state=None):
             k_star = k
             gap = log(exp_dist) - log(real_dist)
     return k_star
+
+
+def distortion_jump(X, clu_meth, k_max=None):
+    """
+    Find the number of clusters that maximizes efficiency while minimizing error
+    by information theoretic standards (wikipedia). For each number of cluster,
+    it calculates the distortion reduction. Roughly, it selects k such as
+    the difference between distortion with k clusters minus distortion with k-1
+    clusters is maximal.
+
+    More precisely, let d(k) equals distortion with k clusters.
+    Let Y=nb_feature/2, let D[k] = d(k)^{-Y}
+    k^* = argmax(D[k] - D[k-1])
+
+    Parameters
+    ----------
+    X: numpy array of shape (nb_date, nb_features)
+    clu_meth: function X, nb_cluster -> assignement of each point to a
+        cluster (list of int of length n_data)
+    k_max: int: maximum number of clusters
+
+    Return
+    ------
+    k_star: int: optimal number of cluster
+    """
+    nb_data, nb_feature = X.shape
+    # if no maximum number of clusters set, take datasize divided by 2
+    if not k_max:
+        k_max = nb_data // 2
+
+    Y = - nb_feature / 2
+    info_gain = 0
+    old_dist = pow(distortion(X, np.zeros(nb_data)), Y)
+    for k in range(2, k_max + 1):
+        labs = clu_meth(X, k)
+        new_dist = pow(distortion(X, labs), Y)
+        if new_dist - old_dist >= info_gain:
+            k_star = k
+            info_gain = new_dist - old_dist
+        old_dist = new_dist
+    return k_star
+        
