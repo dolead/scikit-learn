@@ -5,7 +5,7 @@ from sklearn.utils.testing import (assert_array_equal, assert_almost_equal,
 
 from sklearn.cluster.choose_nb_cluster import (
     adjacency_matrix, _one_stability_measure, stability, distortion,
-    normal_distortion, gap_statistic, distortion_jump,
+    normal_distortion, gap_statistic, distortion_jump, max_silhouette,
 )
 from sklearn.cluster.k_means_ import k_means
 
@@ -81,3 +81,13 @@ def test_distortion_jump():
     X += offset
     clu_meth = lambda X, k: k_means(X, k, random_state=1)[1]
     assert_equal(distortion_jump(X, clu_meth, k_max=6), 3)
+
+
+def test_silhouette():
+    generator = np.random.RandomState(0)
+    # for j in [20 * i: 20 * (i+1)[, x[j] = [rand rand] + [4 * i, 4 * i]
+    X = generator.uniform(size=(100, 2))
+    offset = np.dot(np.arange(100).reshape((100, 1)) / 20 * 1, np.ones((1, 2)))
+    X += offset
+    clu_meth = lambda X, k: k_means(X, k, random_state=1)[1]
+    assert_equal(max_silhouette(X, clu_meth, k_max=6), 5)

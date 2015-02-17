@@ -321,3 +321,71 @@ def distortion_jump(X, clu_meth, k_max=None):
             info_gain = new_dist - old_dist
         old_dist = new_dist
     return k_star
+
+
+def calc_silhouettes(X, labels):
+    """
+    Compute the mean silhouette of chosen clusters. If the clustering is
+    relevant, a point is close to its cluster center and far from the
+    nearest cluster center. The silhouette of a point i is:
+
+    s(i) = (b(i) -  a(i)) / max(a(i), b(i))
+
+    with a(i) the distance between point i and its cluster center, and
+    b(i) is the distance between point i and the center of the nearest
+    cluster.
+
+    Parameter
+    ---------
+    X: numpy array of size (nb_data, nb_feature)
+    labels: list of int of length nb_data: labels[i] is the cluster
+        assigned to X[i, :]
+
+    Return
+    ------
+    sil: float: mean silhouette of this clustering
+    """
+    assi = defaultdict(list)
+    for i, l in enumerate(labels):
+        assi[l].append(i)
+
+    centers = dict((lab, np.mean(X[point, :], axis=0))
+                   for lab, point in assi.items())
+
+    sil = .0
+    for x, lab in zip(X, labels):
+        dist_intra = np.sum((x - centers[lab]) ** 2)
+        dist_extra = min(np.sum((x - c) ** 2)
+                         for l, c in centers.items() if l != lab)
+        sil += (dist_extra - dist_intra) / (max(dist_intra, dist_extra) or 1)
+    return sil / X.shape[0]
+
+
+def max_silhouette(X, clu_meth, k_max=None):
+    """
+    The silhouette of a point in a clustering evaluates the dissimilarity of
+    this point with its cluster center, and the dissimilarity of this point
+    and the closest cluster. We choose the number of cluster which maximize
+    the mean silhouette of clustered points
+
+    Reference: "Silhouettes: a Graphical Aid to the Interpretation and
+    Validation of Cluster Analysis". P.J. Rousseeuw, 1987. Computational
+    and Applied Mathematics 20: 53-65
+
+    Parameters
+    ----------
+    X: numpy array of shape (nb_date, nb_features)
+    clu_meth: function X, nb_cluster -> assignement of each point to a
+        cluster (list of int of length n_data)
+    k_max: int: maximum number of clusters
+
+    Return
+    ------
+    k_star: int: optimal number of cluster
+    """
+    # if no maximum number of clusters set, take datasize divided by 2
+    if not k_max:
+        k_max = X.shape[0] // 2
+
+    return max((k for k in range(2, k_max+1)),
+               key=lambda k: calc_silhouettes(X, clu_meth(X, k)))
