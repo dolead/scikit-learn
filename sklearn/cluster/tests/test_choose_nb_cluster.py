@@ -54,7 +54,7 @@ def test_normal_distortion():
         n = len(points)
         mid = n / 2
         return [int(i < mid) for i in range(n)]
-    assert_almost_equal(normal_distortion((100, 2), clu_meth,
+    assert_almost_equal(normal_distortion(np.zeros((100, 2)), clu_meth,
                                           nb_draw=10, random_state=0),
                         93.731154)
 
@@ -67,6 +67,8 @@ def test_gap_statistic():
     X += offset
     clu_meth = lambda X, k: k_means(X, k, random_state=1)[1]
     assert_equal(gap_statistic(X, clu_meth, k_max=6, nb_draw=10, random_state=0), 3)
+    assert_equal(gap_statistic(X, clu_meth, k_max=6, nb_draw=10, random_state=0,
+                               draw_model='normal'), 3)
 
 
 def test_distortion_jump():
