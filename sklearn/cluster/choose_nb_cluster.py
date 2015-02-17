@@ -143,9 +143,35 @@ def distortion(X, labels):
     return inertia / X.shape[1]
 
 
-def normal_distortion(data_shape, clu_meth, nb_draw=100, random_state=None):
+def normal_distortion(X, clu_meth, nb_draw=100, random_state=None):
     """
     Draw centered and reduced data of size data_shape = (nb_data, nb_feature),
+    Clusterize data using clu_meth and compute distortion
+
+    Parameter
+    ---------
+    X numpy array of size (nb_data, nb_feature)
+    clu_meth: function data -> labels: list of size nb_data of int
+
+    Return
+    ------
+    mean_distortion: float
+    """
+    rng = check_random_state(random_state)
+
+    data_shape = X.shape
+    dist = .0
+    for i in range(nb_draw):
+        X_rand = rng.standard_normal(data_shape)
+        dist += distortion(X_rand, clu_meth(X_rand))
+
+    return dist / nb_draw
+
+
+def uniform_distortion(X, clu_meth, nb_draw=100, random_state=None):
+    """
+    Uniformly draw data of size data_shape = (nb_data, nb_feature)
+    in the smallest hyperrectangle containing real data X.
     Clusterize data using clu_meth and compute distortion
 
     Parameter
@@ -158,16 +184,19 @@ def normal_distortion(data_shape, clu_meth, nb_draw=100, random_state=None):
     mean_distortion: float
     """
     rng = check_random_state(random_state)
+    val_min = np.min(X, axis=0)
+    val_max = np.max(X, axis=0)
 
     dist = .0
     for i in range(nb_draw):
-        X = rng.standard_normal(data_shape)
-        dist += distortion(X, clu_meth(X))
+        X_rand = rng.uniform(size=X.shape) * (val_max - val_min) + val_min
+        dist += distortion(X_rand, clu_meth(X_rand))
 
     return dist / nb_draw
 
 
-def gap_statistic(X, clu_meth, k_max=None, nb_draw=100, random_state=None):
+def gap_statistic(X, clu_meth, k_max=None, nb_draw=100, random_state=None,
+                  draw_model='uniform'):
     """
     Estimating optimal number of cluster for data X with method clu_meth by
     comparing distortion of clustered real data with distortion of clustered
@@ -184,6 +213,9 @@ def gap_statistic(X, clu_meth, k_max=None, nb_draw=100, random_state=None):
     X: data. array nb_data * nb_feature
     clu_meth: function X, nb_cluster -> assignement of each point to a
         cluster (list of int of length n_data)
+    draw_model: under which i.i.d data are draw. default: uniform data
+        (following Tibshirani et al.)
+        can be 'uniform', 'normal' (Gaussian distribution)
 
     Return
     ------
@@ -201,7 +233,10 @@ def gap_statistic(X, clu_meth, k_max=None, nb_draw=100, random_state=None):
     for k in range(2, k_max + 1):
         real_dist = distortion(X, clu_meth(X, k))
         meth = lambda X: clu_meth(X, k)
-        exp_dist = normal_distortion(shape, meth, nb_draw)
+        if draw_model == 'uniform':
+            exp_dist = uniform_distortion(X, meth, nb_draw)
+        if draw_model == 'normal':
+            exp_dist = normal_distortion(X, meth, nb_draw)
         if log(exp_dist) - log(real_dist) > gap:
             k_star = k
             gap = log(exp_dist) - log(real_dist)
@@ -247,7 +282,7 @@ def distortion_jump(X, clu_meth, k_max=None):
             info_gain = new_dist - old_dist
         old_dist = new_dist
     return k_star
-        
+
 
 def calc_silhouettes(X, labels):
     """
@@ -281,7 +316,7 @@ def calc_silhouettes(X, labels):
     for x, lab in zip(X, labels):
         dist_intra = np.sum((x - centers[lab]) ** 2)
         dist_extra = min(np.sum((x - c) ** 2)
-                         for l, c in centers.items() if l <> lab)
+                         for l, c in centers.items() if l != lab)
         sil += (dist_extra - dist_intra) / (max(dist_intra, dist_extra) or 1)
     return sil / X.shape[0]
 
@@ -312,5 +347,5 @@ def max_silhouette(X, clu_meth, k_max=None):
     if not k_max:
         k_max = nb_data // 2
 
-    return max((k for k in range(2, k_max+1)),
+    return max((k for k in range(2, k_max + 1)),
                key=lambda k: calc_silhouettes(X, clu_meth(X, k)))
