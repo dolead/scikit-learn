@@ -293,6 +293,10 @@ def max_silhouette(X, clu_meth, k_max=None):
     and the closest cluster. We choose the number of cluster which maximize
     the mean silhouette of clustered points
 
+    Reference: "Silhouettes: a Graphical Aid to the Interpretation and
+    Validation of Cluster Analysis". P.J. Rousseeuw, 1987. Computational
+    and Applied Mathematics 20: 53-65
+
     Parameters
     ----------
     X: numpy array of shape (nb_date, nb_features)
