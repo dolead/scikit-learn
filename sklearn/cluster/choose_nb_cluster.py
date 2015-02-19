@@ -1,13 +1,15 @@
 from __future__ import division
 from collections import defaultdict
 
-from math import log, pow
+from math import pow, sqrt, log
+from operator import itemgetter
 
 import numpy as np
 import scipy.sparse as sp
 from scipy.spatial.distance import cosine
 
 from ..utils import check_random_state
+from sklearn import preprocessing
 
 
 def stability(X, cluster_method, k_max=None, nb_draw=100, prop_subset=.8, random_state=None):
@@ -160,15 +162,16 @@ def normal_distortion(X, clu_meth, nb_draw=100, random_state=None):
     rng = check_random_state(random_state)
 
     data_shape = X.shape
-    dist = .0
+    dist = []
     for i in range(nb_draw):
         X_rand = rng.standard_normal(data_shape)
-        dist += distortion(X_rand, clu_meth(X_rand))
+        dist.append(distortion(X_rand, clu_meth(X_rand)) / data_shape[0])
 
-    return dist / nb_draw
+    return dist
 
 
-def uniform_distortion(X, clu_meth, nb_draw=100, random_state=None):
+def uniform_distortion(X, clu_meth, nb_draw=100, random_state=None,
+                       val_min=None, val_max=None):
     """
     Uniformly draw data of size data_shape = (nb_data, nb_feature)
     in the smallest hyperrectangle containing real data X.
@@ -178,31 +181,47 @@ def uniform_distortion(X, clu_meth, nb_draw=100, random_state=None):
     ---------
     data_shape: dimension of input data, (nb_data, nb_feature)
     clu_meth: function data -> labels: list of size nb_data of int
+    val_min: minimum values of each dimension of input data
+        array of length nb_feature
+    val_max: maximum values of each dimension of input data
+        array of length nb_feature
 
     Return
     ------
     mean_distortion: float
     """
     rng = check_random_state(random_state)
-    val_min = np.min(X, axis=0)
-    val_max = np.max(X, axis=0)
+    if val_min is None:
+        val_min = np.min(X, axis=0)
+    if val_max is None:
+        val_max = np.max(X, axis=0)
 
-    dist = .0
+    dist = []
     for i in range(nb_draw):
         X_rand = rng.uniform(size=X.shape) * (val_max - val_min) + val_min
-        dist += distortion(X_rand, clu_meth(X_rand))
+        dist.append(distortion(X_rand, clu_meth(X_rand)) / X.shape[0])
 
-    return dist / nb_draw
+    return dist
 
 
-def gap_statistic(X, clu_meth, k_max=None, nb_draw=100, random_state=None,
+def gap_statistic(X, clu_meth, k_max=None, nb_draw=10, random_state=None,
                   draw_model='uniform'):
     """
     Estimating optimal number of cluster for data X with method clu_meth by
     comparing distortion of clustered real data with distortion of clustered
-    random data. Statistic gap is defined as
+    random data. Let D_rand(k) be the distortion of random data in k clusters,
+    D_real(k) distortion of real data in k clusters, statistic gap is defined as
 
-    Gap(k) = E(log(D_rand)) - log(D_real)
+    Gap(k) = E(log(D_rand(k))) - log(D_real(k))
+
+    We draw nb_draw random data "shapened-like X" (shape depend on draw_model)
+    We select the smallest k such as the gap between distortion of k clusters
+    of random data and k clusters of real data is superior to the gap with
+    k + 1 clusters minus a "standard-error" safety. Precisely:
+
+    k_star = min_k k
+         s.t. Gap(k) >= Gap(k + 1) - s(k + 1)
+              s(k) = stdev(log(D_rand)) * sqrt(1 + 1 / nb_draw)
 
     From R.Tibshirani, G. Walther and T.Hastie, Estimating the number of
     clusters in a dataset via the Gap statistic, Journal of the Royal
@@ -226,20 +245,34 @@ def gap_statistic(X, clu_meth, k_max=None, nb_draw=100, random_state=None,
     # if no maximum number of clusters set, take datasize divided by 2
     if not k_max:
         k_max = X.shape[0] // 2
+    if draw_model == 'uniform':
+        val_min = np.min(X, axis=0)
+        val_max = np.max(X, axis=0)
+    elif draw_model == 'normal':
+        X = preprocessing.scale(X)
 
     k_star = 1
+    old_gap = 0
     gap = .0
-    shape = X.shape
-    for k in range(2, k_max + 1):
+    for k in range(1, k_max + 2):
         real_dist = distortion(X, clu_meth(X, k))
         meth = lambda X: clu_meth(X, k)
+        # expected distortion
         if draw_model == 'uniform':
-            exp_dist = uniform_distortion(X, meth, nb_draw)
-        if draw_model == 'normal':
-            exp_dist = normal_distortion(X, meth, nb_draw)
-        if log(exp_dist) - log(real_dist) > gap:
-            k_star = k
-            gap = log(exp_dist) - log(real_dist)
+            rand_dist = uniform_distortion(X, meth, nb_draw, val_min=val_min,
+                                           val_max=val_max)
+        elif draw_model == 'normal':
+            rand_dist = normal_distortion(X, meth, nb_draw)
+        else:
+            raise ValueError("For gap statistic, model for random data is unknown")
+        rand_dist = np.log(rand_dist)
+        exp_dist = np.mean(rand_dist)
+        std_dist = np.std(rand_dist)
+        gap = exp_dist - log(real_dist)
+        safety = std_dist * sqrt(1 + 1 / nb_draw)
+        if k_star < 2 and old_gap >= gap - safety:
+            k_star = k - 1
+        old_gap = gap
     return k_star
 
 
@@ -349,3 +382,100 @@ def max_silhouette(X, clu_meth, k_max=None):
 
     return max((k for k in range(2, k_max + 1)),
                key=lambda k: calc_silhouettes(X, clu_meth(X, k)))
+
+
+def AIC(X, clu_meth, k_max=None):
+    """
+    Determining number of clusters with Akaike information criterion
+
+    AIC = 2k - 2ln(L)
+
+    With L the likelihood of a model with k cluster. Here, we assume
+    that, in a cluster, data are gaussianly distributed.
+
+    Parameter
+    ---------
+    X: numpy array of size (nb_data, nb_features)
+    clu_meth: function X, nb_cluster -> assignement of each point to a
+        cluster (list of int of length n_data)
+
+    Return
+    ------
+    k_star: int: optimal number of cluster
+    """
+    if not k_max:
+        k_max = X.shape[0] // 2
+
+    aics = []
+    for k in range(2, k_max + 1):
+        log_like = gaussian_log_likelihood(X, clu_meth(X, k))
+        print(log_like)
+        aics.append((k, k - log_like))
+    return min(aics, key=itemgetter(1))[0]
+
+
+def BIC(X, clu_meth, k_max=None):
+    """
+    Determining number of clusters with Bayesian information criterion
+
+    BIC = - 2ln(L) + k ln(nb_data)
+
+    With L the likelihood of data accordding to a model with k cluster.
+    Here, we assume data in a cluster in gaussianly-distributed
+
+    Parameter
+    ---------
+    X: numpy array of size (nb_data, nb_features)
+    clu_meth: function X, nb_cluster -> assignement of each point to a
+        cluster (list of int of length n_data)
+
+    Return
+    ------
+    k_star: int: optimal number of cluster
+    """
+    if not k_max:
+        k_max = X.shape[0] // 2
+
+    nb_data = X.shape[0]
+    bics = []
+    for k in range(2, k_max + 1):
+        log_like = gaussian_log_likelihood(X, clu_meth(X, k))
+        bics.append((k, k * log(nb_data) - 2 * log_like))
+    return min(bics, key=itemgetter(1))[0]
+
+
+def gaussian_log_likelihood(X, cluster_assi):
+    """
+    Given data and their cluster assignement, compute the likelihood of the
+    data, assuming that data are Gaussianly distributed inside each cluster.
+    Assuming
+
+    P(X| x \in cluster(k)) = exp( -||x - c_k||^2 / 2 * var(c_k))
+                                  / sqrt((2 * pi)^{nb_feature} * var(c_k))
+
+    and the log likelihood will be reduce
+    ln(L) = ln(\Prod_(x \in X) P (x |x \in cluster(k)))
+          = \sum_x [-||x - c_k||^2 / (2 * var(c_k)) - ln(sqrt(2 * pi * var(c_k)))]
+          = \sum_k n_k / 2 - n_k ln(sqrt(2 * pi * var(c_k)))
+          = nb_data / 2 - \sum_k n_k ln(sqrt(2 * pi * var(c_k)))
+          = \sum_k - n_k * ln(stdev(c_k)) + Constant
+
+    Parameter
+    ---------
+    X: numpy array (nb_data, nb_feature)
+    cluster_assi: list of int of length  nb_data
+
+    Return
+    ------
+    res: float
+    """
+    assi = defaultdict(list)
+    for i, l in enumerate(cluster_assi):
+        assi[l].append(i)
+
+    log_likelihood = .0
+    for point_ids in assi.values():
+        points = X[point_ids, :]
+        stdev = sum(np.std(points, axis=0))
+        log_likelihood -= points.shape[0] * log(stdev)
+    return log_likelihood
