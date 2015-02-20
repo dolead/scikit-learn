@@ -9,6 +9,7 @@ from sklearn.cluster.choose_nb_cluster import (
     AIC, BIC, gaussian_log_likelihood,
 )
 from sklearn.cluster.k_means_ import k_means
+from sklearn import preprocessing
 
 
 def test_adjacency_matrix():
@@ -99,8 +100,9 @@ def test_aic():
     X = generator.uniform(size=(80, 2))
     offset = np.dot(np.arange(80).reshape((80, 1)) / 20 * 10, np.ones((1, 2)))
     X += offset
+    X = preprocessing.scale(X)
     clu_meth = lambda X, k: k_means(X, k, random_state=1)[1]
-    assert_equal(AIC(X, clu_meth, k_max=6), 6)
+    assert_equal(AIC(X, clu_meth, k_max=10), 10)
 
 
 def test_bic():
@@ -118,5 +120,5 @@ def test_gaussian_log_likelihood():
     X = generator.multivariate_normal(
         np.zeros(2), np.eye(2, 2), size=1000)
     assi = np.arange(1000) / 500
-    assert_almost_equal(gaussian_log_likelihood(X, assi), -966.993 * log(2),
+    assert_almost_equal(gaussian_log_likelihood(X, assi), 43.976179888,
                         decimal=2)
