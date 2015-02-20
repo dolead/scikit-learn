@@ -1,4 +1,5 @@
 from __future__ import division
+from functools import reduce
 from collections import defaultdict
 
 from math import pow, sqrt, log
@@ -450,15 +451,15 @@ def gaussian_log_likelihood(X, cluster_assi):
     data, assuming that data are Gaussianly distributed inside each cluster.
     Assuming
 
-    P(X| x \in cluster(k)) = exp( -||x - c_k||^2 / 2 * var(c_k))
-                                  / sqrt((2 * pi)^{nb_feature} * var(c_k))
+    P(X| x \in cluster(k)) = exp( -(x - c_k)^T \Sigma^{-1} (x - c_k) / 2)
+                                  / sqrt((2 * pi)^{nb_feature} * det(\Sigma))
 
     and the log likelihood will be reduce
     ln(L) = ln(\Prod_(x \in X) P (x |x \in cluster(k)))
-          = \sum_x [-||x - c_k||^2 / (2 * var(c_k)) - ln(sqrt(2 * pi * var(c_k)))]
-          = \sum_k n_k / 2 - n_k ln(sqrt(2 * pi * var(c_k)))
-          = nb_data / 2 - \sum_k n_k ln(sqrt(2 * pi * var(c_k)))
-          = \sum_k - n_k * ln(stdev(c_k)) + Constant
+          = \sum_x [-(x - c_k)^T \Sigma^{-1} (x - c_k) / 2 - ln(sqrt(2 * pi * det(\Sigma)))]
+          = \sum_k n_k / 2 - n_k ln(sqrt(2 * pi * det(\Sigma)))
+          = nb_data / 2 - \sum_k n_k ln(sqrt(2 * pi * det(\Sigma)))
+          = - \sum_k - n_k * ln(det(\Sigma))  / 2+ Constant
 
     Parameter
     ---------
@@ -476,6 +477,6 @@ def gaussian_log_likelihood(X, cluster_assi):
     log_likelihood = .0
     for point_ids in assi.values():
         points = X[point_ids, :]
-        stdev = sum(np.std(points, axis=0))
-        log_likelihood -= points.shape[0] * log(stdev)
+        sigma = np.cov(points.T)
+        log_likelihood -= points.shape[0] * log(np.linalg.det(sigma)) / 2
     return log_likelihood
