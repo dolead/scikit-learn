@@ -424,7 +424,7 @@ def calc_CH_index(X, labels):
         # unbiaised estimate of variace is \sum (x - mean_x)^2 / (n - 1)
         # so, if I want sum of dispersion, I need
         # W_k = cov(X) * (n - 1)
-        nb_point = clu_points.shape[0] 
+        nb_point = clu_points.shape[0]
         disp_intra += np.cov(clu_points, rowvar=0) * (nb_point - 1)
         extra_var = (np.mean(clu_points, axis=0) - center).reshape((nb_feature, 1))
         disp_extra += np.multiply(extra_var, extra_var.transpose()) * nb_point
