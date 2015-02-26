@@ -464,3 +464,108 @@ def max_CH_index(X, clu_meth, k_max=None):
 
     return max((k for k in range(2, k_max + 1)),
                key=lambda k: calc_CH_index(X, clu_meth(X, k)))
+
+
+def elbow_within(X, clu_meth, k_max=None):
+    """
+    There are many "elbow" methods. The basic idea is that, while you use
+    less clusters than there are in your data, distortion should decrease
+    a lot. Once you have past the optimal number of clusters, it decreases
+    slowly
+    In this implementation, we compare relative distortion loss. We select the
+    number of cluster in the following manner:
+
+    k^* = argmin (D(k) - D(k + 1)) / (D(k - 1) - D(k))
+
+    Parameters
+    ----------
+    X: numpy array of shape (nb_date, nb_features)
+    clu_meth: function X, nb_cluster -> assignement of each point to a
+        cluster (list of int of length n_data)
+    k_max: int: maximum number of clusters
+
+    Return
+    ------
+    k_star: int: optimal number of cluster
+    """
+    # if no maximum number of clusters set, take datasize divided by 2
+    if not k_max:
+        k_max = X.shape[0] // 2
+
+    dists = [distortion(X, clu_meth(X, k)) for k in range(1, k_max + 1)]
+    # Python 3 cannot do lambda argument comprehension, so x in lambda x
+    # stands for x = k, (dist(k-1), dist(k), dist(k+1))
+    return min(enumerate(zip(dists, dists[1:], dists[2:])),
+               key=lambda x: (x[1][1] - x[1][2]) / (x[1][0] - x[1][1]))[0]
+
+
+def between_cluster_dist(X, labels):
+    """
+    Compute the between cluster distance.
+
+    Q(k) = \sum_{q=1...k} ||c_k - c||^2 * n_q
+
+    With c_k the center of cluster k, n_q number of data in cluster k and
+    c center of data
+
+    Parameter
+    ---------
+    X: numpy array of size (nb_data, nb_feature)
+    labels: list of int of length nb_data: labels[i] is the cluster
+        assigned to X[i, :]
+
+    Return
+    ------
+    res: float: mean silhouette of this clustering
+    """
+    assi = defaultdict(list)
+    for i, l in enumerate(labels):
+        assi[l].append(i)
+
+    res = 0
+    center = np.mean(X, axis=0)
+    for points in assi.values():
+        clu_center = np.mean(X[points, :], axis=0)
+        res += np.sum(x ** 2 for x in center - clu_center) * len(points)
+    return res
+
+
+def elbow_between(X, clu_meth, k_max=None):
+    """
+    There are many "elbow" methods. The basic idea is that, while you use
+    less clusters than there are in your data, between cluster distance should
+    be high. Once you have past the optimal number of clusters, there is little
+    increase of between cluster distance.
+    In this implementation, we compare relative distortion loss. We select the
+    number of cluster in the following manner:
+
+    k^* = argmin (Q(k) - Q(k - 1)) / (Q(k + 1) - Q(k))
+
+    with
+
+    Q(k) = \sum_{q=1...k} ||c_k - c||^2 * n_q
+
+    With c_k the center of cluster k, n_q number of data in cluster k and
+    c center of data
+
+    Parameters
+    ----------
+    X: numpy array of shape (nb_date, nb_features)
+    clu_meth: function X, nb_cluster -> assignement of each point to a
+        cluster (list of int of length n_data)
+    k_max: int: maximum number of clusters
+
+    Return
+    ------
+    k_star: int: optimal number of cluster
+    """
+    # if no maximum number of clusters set, take datasize divided by 2
+    if not k_max:
+        k_max = X.shape[0] // 2
+
+    dists = [between_cluster_dist(X, clu_meth(X, k))
+             for k in range(1, k_max + 1)]
+    # Python 3 cannot do lambda argument comprehension, so x in lambda x
+    # stands for x = k, (dist(k-1), dist(k), dist(k+1))
+    return min(enumerate(zip(dists, dists[1:], dists[2:])),
+               key=lambda x: (x[1][1] - x[1][0]) / (x[1][2] - x[1][1]))[0]
