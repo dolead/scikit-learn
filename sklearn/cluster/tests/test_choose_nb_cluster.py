@@ -50,7 +50,7 @@ def test_distortion():
     X = np.array([[0, 0], [2, 2],
                   [5, 5], [6, 6]])
     labels = [0, 0, 1, 1]
-    assert_equal(distortion(X, labels), 2.5)
+    assert_almost_equal(distortion(X, labels), 2.5)
 
 
 def test_normal_distortion():
@@ -100,7 +100,7 @@ def test_calc_CH():
     X = np.array([[0, 0]] * 50 + [[1, 1]] * 50
                  + [[3, 3]] * 50 + [[4, 4]] * 50)
     labels = [0] * 100 + [1] * 100
-    assert_equal(calc_CH_index(X, labels), 4.5 * (200 - 2) / .5)
+    assert_almost_equal(calc_CH_index(X, labels), 4.5 * (200 - 2) / .5)
 
 
 def test_Calinsk_Harabasz():
