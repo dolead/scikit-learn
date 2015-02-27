@@ -71,7 +71,9 @@ def test_gap_statistic():
     X += offset
     clu_meth = lambda X, k: k_means(X, k, random_state=1)[1]
     assert_equal(gap_statistic(X, clu_meth, k_max=6, nb_draw=10,
-                               random_state=0), 3)
+                               random_state=0, draw_model='normal'), 3)
+    assert_equal(gap_statistic(X, clu_meth, k_max=10, nb_draw=10,
+                               random_state=0, distortion_meth='cityblock'), 3)
 
 
 def test_distortion_jump():
