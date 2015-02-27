@@ -7,7 +7,7 @@ from operator import itemgetter
 
 import numpy as np
 import scipy.sparse as sp
-from scipy.spatial.distance import cosine
+from scipy.spatial.distance import cosine, cdist
 
 from ..utils import check_random_state
 from sklearn import preprocessing
@@ -125,28 +125,82 @@ def _one_stability_measure(cluster_method, X, prop_sample, random_state=None):
     return 1 - cosine(adj_mat_1.flatten(), adj_mat_2.flatten())
 
 
-def distortion(X, labels):
+def distortion(X, labels, distortion_meth='sqeuclidean', p=2):
     """
     Given data and their cluster assigment, compute the distortion D
 
-    D = \sum_{x \in X}||x - c_x||^2
+    Parameter
+    ---------
+    X: numpy array of shape (nb_data, nb_feature)
+    labels: list of int of length nb_data
+    distortion_meth: can be a function X, labels -> float,
+        can be a string naming a scipy.spatial distance
+            (in ['euclidian', 'minkowski', 'seuclidiean', 'sqeuclidean', 'chebyshev'
+                 'cityblock', 'cosine', 'correlation', 'hamming', 'jaccard', 'canberra',
+                 'Bray-Curtis', 'mahalanobis', 'yule', 'matching', 'dice', 'kulsinski',
+                 'rogerstanimoto', 'russellrao', 'sokalmichener', 'sokalsneath',
+                 'wminkowski'])
+    p : double
+        The p-norm to apply (for Minkowski, weighted and unweighted)
 
-    With c_x the center of the cluster containing x
+    Return
+    ------
+    distortion: float
     """
+    if isinstance(distortion_meth, str):
+        return distortion_metrics(X, labels, distortion_meth, p)
+    else:
+        return distortion_meth(X, labels)
+
+
+def distortion_metrics(X, labels, metric='sqeuclidean', p=2):
+    """
+    Given data and their cluster assigment, compute the distortion D
+
+    D = \sum_{x \in X} distance(x, c_x)
+
+    With c_x the center of the cluster containing x, distance is the distance defined by
+    metrics
+
+    Parameter
+    ---------
+    X: numpy array of shape (nb_data, nb_feature)
+    labels: list of int of length nb_data
+    metric: string naming a scipy.spatial distance
+        can be in ['euclidian', 'minkowski', 'seuclidiean', 'sqeuclidean', 'chebyshev'
+                   'cityblock', 'cosine', 'correlation', 'hamming', 'jaccard', 'canberra',
+                   'Bray-Curtis', 'mahalanobis', 'yule', 'matching', 'dice', 'kulsinski',
+                   'rogerstanimoto', 'russellrao', 'sokalmichener', 'sokalsneath',
+                   'wminkowski']
+    p : double
+        The p-norm to apply (for Minkowski, weighted and unweighted)
+
+    Return
+    ------
+    distortion: float
+    """
+    if metric == 'l2':
+        # Translate to something understood by scipy
+        metric = 'euclidean'
+    elif metric in ('l1', 'manhattan'):
+        metric = 'cityblock'
+
     assi = defaultdict(list)
     for i, l in enumerate(labels):
         assi[l].append(i)
 
-    centers = {lab: np.mean(X[point, :], axis=0) for lab, point in assi.items()}
-
     inertia = .0
-    for x, lab in zip(X, labels):
-        inertia += np.sum((x - centers[lab]) ** 2)
+    nb_feature = X.shape[1]
+    for points in assi.values():
+        clu_points = X[points, :]
+        clu_center = np.mean(clu_points, axis=0).reshape(1, nb_feature)
+        inertia += np.sum(cdist(clu_points, clu_center, metric=metric, p=p))
 
     return inertia / X.shape[1]
 
 
-def normal_distortion(X, clu_meth, nb_draw=100, random_state=None):
+def normal_distortion(X, clu_meth, nb_draw=100, distortion_meth='sqeuclidean',
+                      p=2, random_state=None):
     """
     Draw centered and reduced data of size data_shape = (nb_data, nb_feature),
     Clusterize data using clu_meth and compute distortion
@@ -155,6 +209,15 @@ def normal_distortion(X, clu_meth, nb_draw=100, random_state=None):
     ---------
     X numpy array of size (nb_data, nb_feature)
     clu_meth: function data -> labels: list of size nb_data of int
+    distortion_meth: can be a function X, labels -> float,
+        can be a string naming a scipy.spatial distance
+            (in ['euclidian', 'minkowski', 'seuclidiean', 'sqeuclidean', 'chebyshev'
+                 'cityblock', 'cosine', 'correlation', 'hamming', 'jaccard', 'canberra',
+                 'Bray-Curtis', 'mahalanobis', 'yule', 'matching', 'dice', 'kulsinski',
+                 'rogerstanimoto', 'russellrao', 'sokalmichener', 'sokalsneath',
+                 'wminkowski'])
+    p : double
+        The p-norm to apply (for Minkowski, weighted and unweighted)
 
     Return
     ------
@@ -166,13 +229,14 @@ def normal_distortion(X, clu_meth, nb_draw=100, random_state=None):
     dist = []
     for i in range(nb_draw):
         X_rand = rng.standard_normal(data_shape)
-        dist.append(distortion(X_rand, clu_meth(X_rand)) / data_shape[0])
+        dist.append(distortion(
+            X_rand, clu_meth(X_rand), distortion_meth, p) / data_shape[0])
 
     return dist
 
 
-def uniform_distortion(X, clu_meth, nb_draw=100, random_state=None,
-                       val_min=None, val_max=None):
+def uniform_distortion(X, clu_meth, nb_draw=100, val_min=None, val_max=None,
+                       distortion_meth='sqeuclidean', p=2, random_state=None):
     """
     Uniformly draw data of size data_shape = (nb_data, nb_feature)
     in the smallest hyperrectangle containing real data X.
@@ -186,6 +250,15 @@ def uniform_distortion(X, clu_meth, nb_draw=100, random_state=None,
         array of length nb_feature
     val_max: maximum values of each dimension of input data
         array of length nb_feature
+    distortion_meth: can be a function X, labels -> float,
+        can be a string naming a scipy.spatial distance
+            (in ['euclidian', 'minkowski', 'seuclidiean', 'sqeuclidean', 'chebyshev'
+                 'cityblock', 'cosine', 'correlation', 'hamming', 'jaccard', 'canberra',
+                 'Bray-Curtis', 'mahalanobis', 'yule', 'matching', 'dice', 'kulsinski',
+                 'rogerstanimoto', 'russellrao', 'sokalmichener', 'sokalsneath',
+                 'wminkowski'])
+    p : double
+        The p-norm to apply (for Minkowski, weighted and unweighted)
 
     Return
     ------
@@ -200,13 +273,14 @@ def uniform_distortion(X, clu_meth, nb_draw=100, random_state=None,
     dist = []
     for i in range(nb_draw):
         X_rand = rng.uniform(size=X.shape) * (val_max - val_min) + val_min
-        dist.append(distortion(X_rand, clu_meth(X_rand)) / X.shape[0])
+        dist.append(distortion(X_rand, clu_meth(X_rand),
+                               distortion_meth, p) / X.shape[0])
 
     return dist
 
 
 def gap_statistic(X, clu_meth, k_max=None, nb_draw=10, random_state=None,
-                  draw_model='uniform'):
+                  draw_model='uniform', distortion_meth='sqeuclidean', p=2):
     """
     Estimating optimal number of cluster for data X with method clu_meth by
     comparing distortion of clustered real data with distortion of clustered
@@ -236,6 +310,15 @@ def gap_statistic(X, clu_meth, k_max=None, nb_draw=10, random_state=None,
     draw_model: under which i.i.d data are draw. default: uniform data
         (following Tibshirani et al.)
         can be 'uniform', 'normal' (Gaussian distribution)
+    distortion_meth: can be a function X, labels -> float,
+        can be a string naming a scipy.spatial distance
+            (in ['euclidian', 'minkowski', 'seuclidiean', 'sqeuclidean', 'chebyshev'
+                 'cityblock', 'cosine', 'correlation', 'hamming', 'jaccard', 'canberra',
+                 'Bray-Curtis', 'mahalanobis', 'yule', 'matching', 'dice', 'kulsinski',
+                 'rogerstanimoto', 'russellrao', 'sokalmichener', 'sokalsneath',
+                 'wminkowski'])
+    p : double
+        The p-norm to apply (for Minkowski, weighted and unweighted)
 
     Return
     ------
@@ -256,14 +339,14 @@ def gap_statistic(X, clu_meth, k_max=None, nb_draw=10, random_state=None,
     old_gap = 0
     gap = .0
     for k in range(1, k_max + 2):
-        real_dist = distortion(X, clu_meth(X, k))
+        real_dist = distortion(X, clu_meth(X, k), distortion_meth, p)
         meth = lambda X: clu_meth(X, k)
         # expected distortion
         if draw_model == 'uniform':
-            rand_dist = uniform_distortion(X, meth, nb_draw, val_min=val_min,
-                                           val_max=val_max)
+            rand_dist = uniform_distortion(X, meth, nb_draw, val_min, val_max,
+                                           distortion_meth, p)
         elif draw_model == 'normal':
-            rand_dist = normal_distortion(X, meth, nb_draw)
+            rand_dist = normal_distortion(X, meth, nb_draw, distortion_meth, p)
         else:
             raise ValueError("For gap statistic, model for random data is unknown")
         rand_dist = np.log(rand_dist)
@@ -277,7 +360,7 @@ def gap_statistic(X, clu_meth, k_max=None, nb_draw=10, random_state=None,
     return k_star
 
 
-def distortion_jump(X, clu_meth, k_max=None):
+def distortion_jump(X, clu_meth, k_max=None, distortion_meth='sqeuclidean', p=2):
     """
     Find the number of clusters that maximizes efficiency while minimizing error
     by information theoretic standards (wikipedia). For each number of cluster,
@@ -295,6 +378,15 @@ def distortion_jump(X, clu_meth, k_max=None):
     clu_meth: function X, nb_cluster -> assignement of each point to a
         cluster (list of int of length n_data)
     k_max: int: maximum number of clusters
+    distortion_meth: can be a function X, labels -> float,
+        can be a string naming a scipy.spatial distance
+            (in ['euclidian', 'minkowski', 'seuclidiean', 'sqeuclidean', 'chebyshev'
+                 'cityblock', 'cosine', 'correlation', 'hamming', 'jaccard', 'canberra',
+                 'Bray-Curtis', 'mahalanobis', 'yule', 'matching', 'dice', 'kulsinski',
+                 'rogerstanimoto', 'russellrao', 'sokalmichener', 'sokalsneath',
+                 'wminkowski'])
+    p : double
+        The p-norm to apply (for Minkowski, weighted and unweighted)
 
     Return
     ------
@@ -307,10 +399,10 @@ def distortion_jump(X, clu_meth, k_max=None):
 
     Y = - nb_feature / 2
     info_gain = 0
-    old_dist = pow(distortion(X, np.zeros(nb_data)), Y)
+    old_dist = pow(distortion(X, np.zeros(nb_data), distortion_meth, p), Y)
     for k in range(2, k_max + 1):
         labs = clu_meth(X, k)
-        new_dist = pow(distortion(X, labs), Y)
+        new_dist = pow(distortion(X, labs, distortion_meth, p), Y)
         if new_dist - old_dist >= info_gain:
             k_star = k
             info_gain = new_dist - old_dist
@@ -458,7 +550,7 @@ def max_CH_index(X, clu_meth, k_max=None):
                key=lambda k: calc_CH_index(X, clu_meth(X, k)))
 
 
-def elbow_within(X, clu_meth, k_max=None):
+def elbow_within(X, clu_meth, k_max=None, distortion_meth='sqeuclidean', p=2):
     """
     There are many "elbow" methods. The basic idea is that, while you use
     less clusters than there are in your data, distortion should decrease
@@ -475,6 +567,15 @@ def elbow_within(X, clu_meth, k_max=None):
     clu_meth: function X, nb_cluster -> assignement of each point to a
         cluster (list of int of length n_data)
     k_max: int: maximum number of clusters
+    distortion_meth: can be a function X, labels -> float,
+        can be a string naming a scipy.spatial distance
+            (in ['euclidian', 'minkowski', 'seuclidiean', 'sqeuclidean', 'chebyshev'
+                 'cityblock', 'cosine', 'correlation', 'hamming', 'jaccard', 'canberra',
+                 'Bray-Curtis', 'mahalanobis', 'yule', 'matching', 'dice', 'kulsinski',
+                 'rogerstanimoto', 'russellrao', 'sokalmichener', 'sokalsneath',
+                 'wminkowski'])
+    p : double
+        The p-norm to apply (for Minkowski, weighted and unweighted)
 
     Return
     ------
@@ -482,9 +583,10 @@ def elbow_within(X, clu_meth, k_max=None):
     """
     # if no maximum number of clusters set, take datasize divided by 2
     if not k_max:
-        k_max = nb_data // 2
+        k_max = X.shape[0] // 2
 
-    dists = [distortion(X, clu_meth(X, k)) for k in range(1, k_max + 1)]
+    dists = [distortion(X, clu_meth(X, k), distortion_meth, p)
+             for k in range(1, k_max + 1)]
     return min(enumerate(zip(dists, dists[1:], dists[2:])),
                key=lambda (k, (d_old, d_now, d_next)):
                (d_now - d_next) / (d_old - d_now))[0]
