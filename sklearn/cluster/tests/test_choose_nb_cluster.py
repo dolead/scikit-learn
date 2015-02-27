@@ -72,6 +72,8 @@ def test_gap_statistic():
     assert_equal(gap_statistic(X, clu_meth, k_max=10, nb_draw=10, random_state=0), 5)
     assert_equal(gap_statistic(X, clu_meth, k_max=10, nb_draw=10, random_state=0,
                                draw_model='normal'), 5)
+    assert_equal(gap_statistic(X, clu_meth, k_max=10, nb_draw=10, random_state=0,
+                               distortion_meth='cityblock'), 5)
 
 
 def test_distortion_jump():
